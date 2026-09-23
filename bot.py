@@ -29,7 +29,7 @@ DEFAULT = {
     "min_trades_24h": 150,
     "min_pair_age_days": 5,
     "buy_score_threshold": 70,
-    "take_profit_pct": 8,
+    "take_profit_pct": 15,
     "stop_loss_pct": 5,
     "trailing_activation_pct": 5,
     "trailing_drop_pct": 3,
@@ -236,9 +236,17 @@ def notify(kind, row, cfg, state, now):
     last = num(state["last_alert"].get(key))
     if now - last < 3600 * cfg["alert_cooldown_hours"]:
         return
+    observed = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime('%d/%m/%Y %H:%M UTC')
+    condition = ('Entrada: confirmar manutenção do movimento, liquidez e volume antes de comprar.'
+                 if kind == 'REVISAR COMPRA' else
+                 'Saída: conferir preço executável e posição antes de vender; sem ordem automática.')
     message = (f'{kind} {row["symbol"]} | ${row["price"]:.8g} | '
+               f'consulta {observed}\n'
                f'1h {row["h1"]:+.1f}% | 24h {row["h24"]:+.1f}% | '
-               f'liquidez ${row["liq"]:,.0f} | {row["address"]} | {row["url"]}')
+               f'liquidez ${row["liq"]:,.0f} | volume 24h ${row["vol"]:,.0f} | '
+               f'{row["trades"]} negócios 24h | par {row["age"]} dias\n'
+               f'{condition}\nRisco: preço e liquidez podem mudar; slippage e manipulação.\n'
+               f'Mint: {row["address"]}\n{row["url"]}')
     print("ALERTA:", message)
     try:
         if telegram(message):
