@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
   workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: 'Enviar mensagem de teste ao Telegram'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,11 +32,18 @@ jobs:
           key: radar-state-${{ github.run_id }}
           restore-keys: radar-state-
       - name: Consultar o mercado e avisar
+        if: ${{ !inputs.test_telegram }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ZEC_ENTRY_PRICE_USD: ${{ secrets.ZEC_ENTRY_PRICE_USD }}
         run: python bot.py
+      - name: Testar o Telegram
+        if: ${{ inputs.test_telegram }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py --test-telegram
       - name: Guardar histórico de alertas
         if: always()
         uses: actions/cache/save@v4
