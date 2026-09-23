@@ -219,15 +219,33 @@ def whatsapp(message, cfg):
     return bool(data.get("messages"))
 
 
-def telegram(message):
+def telegram(message, state):
     token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
+    if not token:
         return False
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "") or state.get("telegram_chat_id")
+    if not chat_id:
+        updates = request_json(f"https://api.telegram.org/bot{token}/getUpdates")
+        if not updates.get("ok"):
+            raise ValueError("Telegram não respondeu à busca da conversa")
+        chats = set()
+        for update in updates.get("result", []):
+            incoming = update.get("message") or {}
+            chat = incoming.get("chat") or {}
+            sender = incoming.get("from") or {}
+            command = (incoming.get("text") or "").split(maxsplit=1)[0]
+            if (chat.get("type") == "private" and chat.get("id") == sender.get("id")
+                    and command.split("@", 1)[0] == "/start"):
+                chats.add(chat["id"])
+        if len(chats) != 1:
+            print("Telegram: envie /start ao bot; se houver várias conversas, configure TELEGRAM_CHAT_ID.")
+            return False
+        chat_id = chats.pop()
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     result = request_json(url, {"chat_id": chat_id, "text": message[:3800]})
     if not result.get("ok"):
         raise ValueError("Telegram recusou o alerta")
+    state["telegram_chat_id"] = chat_id
     return True
 
 
@@ -249,7 +267,7 @@ def notify(kind, row, cfg, state, now):
                f'Mint: {row["address"]}\n{row["url"]}')
     print("ALERTA:", message)
     try:
-        if telegram(message):
+        if telegram(message, state):
             state["last_alert"][key] = now
             print("Telegram: requisição aceita.")
         elif whatsapp(message, cfg):
@@ -289,6 +307,7 @@ def scan(cfg, state, now=None):
 def main():
     parser = argparse.ArgumentParser(description="Radar de compra/venda à vista na Solana")
     parser.add_argument("--loop", action="store_true", help="monitorar continuamente")
+    parser.add_argument("--test-telegram", action="store_true", help="enviar confirmação ao Telegram")
     args = parser.parse_args()
     if not CONFIG.exists():
         CONFIG.write_text(json.dumps(DEFAULT, ensure_ascii=False, indent=2) + "\n")
@@ -310,6 +329,13 @@ def main():
         state = {}
     state.setdefault("last_alert", {})
     state.setdefault("positions", {})
+    if args.test_telegram:
+        if telegram("Radar de trades Solana conectado. Alertas serão enviados apenas quando houver sinal.", state):
+            STATE.write_text(json.dumps(state, indent=2))
+            print("Telegram: mensagem de teste aceita.")
+        else:
+            print("Telegram: teste não enviado; confira o token e envie /start ao bot.")
+        return
     while True:
         try:
             scan(cfg, state)
