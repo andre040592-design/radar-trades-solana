@@ -1,0 +1,40 @@
+name: Radar Solana 5 minutos
+on:
+  schedule:
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar-solana
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restaurar histórico de alertas
+        uses: actions/cache/restore@v4
+        with:
+          path: estado.json
+          key: radar-state-${{ github.run_id }}
+          restore-keys: radar-state-
+      - name: Consultar o mercado e avisar
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ZEC_ENTRY_PRICE_USD: ${{ secrets.ZEC_ENTRY_PRICE_USD }}
+        run: python bot.py
+      - name: Guardar histórico de alertas
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: estado.json
+          key: radar-state-${{ github.run_id }}
